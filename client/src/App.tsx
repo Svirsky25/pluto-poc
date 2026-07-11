@@ -3,6 +3,8 @@ import { ActionType, DogStatus, StatusResponse } from "./types";
 import {
   getPushState,
   subscribeToPush,
+  unsubscribeFromPush,
+  isSubscribed,
   PushState,
   errStr,
   pushDiagnostics,
@@ -48,41 +50,74 @@ export default function App() {
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [pushState, setPushState] = useState<PushState>("default");
+  const [notifOn, setNotifOn] = useState<boolean>(false);
+  const [notifBusy, setNotifBusy] = useState<boolean>(false);
+  // Absolute local deadline (ms) for the garden window, derived from the
+  // server's remaining_seconds — avoids depending on the device's wall clock.
+  const [deadline, setDeadline] = useState<number | null>(null);
   const prevRemainingRef = useRef<number>(0);
 
   useEffect(() => {
     setPushState(getPushState());
+    isSubscribed().then(setNotifOn);
   }, []);
 
-  const enableNotifications = useCallback(async () => {
+  // Apply a server status payload. Converts the authoritative remaining_seconds
+  // into a local deadline so the countdown is immune to client/server clock skew.
+  const applyStatus = useCallback((data: StatusResponse) => {
+    setStatus(data);
+    setDeadline(
+      data.remaining_seconds > 0
+        ? Date.now() + data.remaining_seconds * 1000
+        : null,
+    );
+  }, []);
+
+  // Toggle push notifications on/off. On => subscribe, Off => unsubscribe.
+  const toggleNotifications = useCallback(async () => {
+    setNotifBusy(true);
     try {
-      const state = await subscribeToPush();
-      setPushState(state);
-      if (state === "denied") setError("ההתראות נחסמו בדפדפן");
-      else setError(null);
+      if (notifOn) {
+        await unsubscribeFromPush();
+        setNotifOn(false);
+        setError(null);
+      } else {
+        const state = await subscribeToPush();
+        setPushState(state);
+        if (state === "granted") {
+          setNotifOn(true);
+          setError(null);
+        } else {
+          // Permission not granted (denied / dismissed) — leave the toggle off.
+          setNotifOn(false);
+        }
+      }
     } catch (e) {
       // Surface the exact error + environment so iOS failures are debuggable
       // right on the device (no remote console needed).
+      setNotifOn(false);
       const detail = `${errStr(e)}\n\n${pushDiagnostics()}`;
       setError(detail);
       // eslint-disable-next-line no-alert
       alert("Push error:\n\n" + detail);
       console.error(e);
+    } finally {
+      setNotifBusy(false);
     }
-  }, []);
+  }, [notifOn]);
 
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/status");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: StatusResponse = await res.json();
-      setStatus(data);
+      applyStatus(data);
       setError(null);
     } catch (e) {
       setError("שגיאה בטעינת הסטטוס");
       console.error(e);
     }
-  }, []);
+  }, [applyStatus]);
 
   // Initial load, then subscribe to realtime status updates via SSE so the
   // UI flips the instant the server changes state (no polling lag).
@@ -92,7 +127,7 @@ export default function App() {
     es.onmessage = (event) => {
       try {
         const data: StatusResponse = JSON.parse(event.data);
-        setStatus(data);
+        applyStatus(data);
         setNow(Date.now());
         setError(null);
       } catch (e) {
@@ -109,9 +144,10 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
-  // Compute remaining seconds locally from the absolute timestamp.
-  const remainingSeconds = status?.garden_available_until
-    ? Math.max(0, Math.ceil((status.garden_available_until - now) / 1000))
+  // Countdown derived from the local deadline (see applyStatus) — independent
+  // of the device's absolute clock, so it works even for short windows.
+  const remainingSeconds = deadline
+    ? Math.max(0, Math.ceil((deadline - now) / 1000))
     : 0;
 
   // When the window hits zero locally, re-sync immediately to catch the
@@ -134,7 +170,7 @@ export default function App() {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data: StatusResponse = await res.json();
-        setStatus(data);
+        applyStatus(data);
         setNow(Date.now());
         setError(null);
       } catch (e) {
@@ -144,7 +180,7 @@ export default function App() {
         setBusy(false);
       }
     },
-    []
+    [applyStatus]
   );
 
   const currentStatus: DogStatus = status?.current_status ?? "NEEDS_WALK";
@@ -251,28 +287,71 @@ export default function App() {
         </button>
       </div>
 
-      <div style={{ marginTop: "26px", minHeight: "24px" }}>
-        {pushState === "granted" ? (
-          <span style={{ opacity: 0.9 }}>🔔 התראות פעילות</span>
-        ) : pushState === "unsupported" ? (
-          <span style={{ opacity: 0.7 }}>הדפדפן לא תומך בהתראות</span>
-        ) : (
+      <div
+        style={{
+          marginTop: "26px",
+          minHeight: "24px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "6px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            opacity: notifBusy ? 0.6 : 1,
+          }}
+        >
+          <span style={{ fontSize: "1rem", fontWeight: 600 }}>
+            {notifOn ? "התראות פעילות 🔔" : "קבלת התראות"}
+          </span>
           <button
-            onClick={enableNotifications}
-            disabled={pushState === "denied"}
+            type="button"
+            role="switch"
+            aria-checked={notifOn}
+            aria-label="קבלת התראות"
+            onClick={toggleNotifications}
+            disabled={notifBusy}
             style={{
-              padding: "10px 18px",
-              fontSize: "1rem",
-              fontWeight: 600,
-              color: "#fff",
-              background: "rgba(0,0,0,0.25)",
-              border: "1px solid rgba(255,255,255,0.5)",
-              borderRadius: "10px",
-              opacity: pushState === "denied" ? 0.6 : 1,
+              position: "relative",
+              width: "58px",
+              height: "32px",
+              padding: 0,
+              border: "none",
+              borderRadius: "16px",
+              background: notifOn ? "#16a34a" : "rgba(0,0,0,0.35)",
+              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.4)",
+              transition: "background 0.2s ease",
+              cursor: notifBusy ? "default" : "pointer",
             }}
           >
-            {pushState === "denied" ? "התראות חסומות 🔕" : "קבל התראות 🔔"}
+            <span
+              style={{
+                position: "absolute",
+                top: "3px",
+                left: notifOn ? "29px" : "3px",
+                width: "26px",
+                height: "26px",
+                borderRadius: "50%",
+                background: "#fff",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                transition: "left 0.2s ease",
+              }}
+            />
           </button>
+        </div>
+        {pushState === "denied" && (
+          <span style={{ fontSize: "0.8rem", opacity: 0.85 }}>
+            ההתראות חסומות — יש לאשר בהגדרות הדפדפן/המכשיר
+          </span>
+        )}
+        {pushState === "unsupported" && (
+          <span style={{ fontSize: "0.8rem", opacity: 0.85 }}>
+            להתראות ב-iPhone יש להתקין את האפליקציה (הוסף למסך הבית)
+          </span>
         )}
       </div>
 

@@ -17,6 +17,18 @@ export function getPushState(): PushState {
   return Notification.permission as PushState;
 }
 
+// Whether there is already an active push subscription (drives the toggle).
+export async function isSubscribed(): Promise<boolean> {
+  if (getPushState() === "unsupported") return false;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    return subscription !== null;
+  } catch {
+    return false;
+  }
+}
+
 // Turn any thrown value into a readable string (Errors, DOMExceptions, etc.).
 export function errStr(e: unknown): string {
   if (e instanceof Error) return `${e.name}: ${e.message}`;

@@ -1,6 +1,7 @@
 import webpush from "web-push";
 import { listSubscriptions, deleteSubscription } from "./db";
 
+console.log(process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
@@ -14,7 +15,7 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
 } else {
   console.warn(
     "[push] VAPID keys missing — push notifications DISABLED. " +
-      "Run `npm run generate:vapid` and set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY."
+      "Run `npm run generate:vapid` and set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY.",
   );
 }
 
@@ -58,6 +59,6 @@ export async function sendPushToAll(message: PushMessage): Promise<void> {
           console.error("[push] send failed:", statusCode ?? err);
         }
       }
-    })
+    }),
   );
 }
