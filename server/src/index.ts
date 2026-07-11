@@ -123,7 +123,7 @@ app.post("/api/action", (req: Request, res: Response) => {
       `[ALERT] ${new Date().toISOString()} - Pluto peed only (רק פיפי). ` +
         `Garden window cleared. Immediate notification.`,
     );
-    firePush("פלוטו 🐶", "פלוטו עשה רק פיפי 💛", "pluto-action");
+    firePush("פלוטו 🐶", "פלוטו עשה רק פיפי 💛💧", "pluto-action");
   } else {
     // Pee + poop: opens a fresh 5-hour garden window (overrides any prior one
     // and resets the reminder flag).
@@ -137,7 +137,7 @@ app.post("/api/action", (req: Request, res: Response) => {
     );
     firePush(
       "פלוטו 🐶",
-      "פלוטו עשה קקי — הגינה זמינה ל-5 שעות 🌳",
+      "פלוטו מסודר, הגיע הזמן לצאת לגינה! 🌳",
       "pluto-action",
     );
   }
@@ -227,7 +227,7 @@ function checkGardenWindow(): void {
     );
     firePush(
       "פלוטו צריך טיול! 🚨",
-      "חלון הגינה נגמר — קחו את פלוטו לטיול 🚶",
+      "זמן הגינה הסתיים - קחו את פלוטו לטיול 🚶",
       "pluto-walk",
     );
     broadcastStatus();
@@ -241,7 +241,7 @@ function checkGardenWindow(): void {
   ) {
     setReminderSent(1);
     const minutesLeft = Math.max(
-      1,
+      30,
       Math.round((row.garden_available_until - now) / 60000),
     );
     console.log(

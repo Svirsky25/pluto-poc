@@ -16,7 +16,7 @@ const STATUS_CONFIG: Record<
   { label: string; emoji: string; background: string; accent: string }
 > = {
   READY_FOR_GARDEN: {
-    label: "מוכן לגינה",
+    label: "אפשר לצאת לגינה",
     emoji: "🌳",
     background: "linear-gradient(160deg, #16a34a 0%, #15803d 100%)",
     accent: "#166534",
@@ -180,12 +180,13 @@ export default function App() {
         setBusy(false);
       }
     },
-    [applyStatus]
+    [applyStatus],
   );
 
   const currentStatus: DogStatus = status?.current_status ?? "NEEDS_WALK";
   const config = STATUS_CONFIG[currentStatus];
-  const showTimer = currentStatus === "READY_FOR_GARDEN" && remainingSeconds > 0;
+  const showTimer =
+    currentStatus === "READY_FOR_GARDEN" && remainingSeconds > 0;
 
   return (
     <div
@@ -202,9 +203,25 @@ export default function App() {
         textAlign: "center",
       }}
     >
-      <h1 style={{ fontSize: "2.4rem", marginBottom: "4px" }}>פלוטו 🐶</h1>
+      <h1
+        style={{
+          fontSize: "2.4rem",
+          marginBottom: "4px",
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          justifyContent: "center",
+        }}
+      >
+        פלוטו
+        <img
+          src="/pluto-no-background.png"
+          alt="פלוטו"
+          style={{ width: "64px", height: "64px", borderRadius: "8px" }}
+        />
+      </h1>
       <p style={{ opacity: 0.85, marginBottom: "28px" }}>
-        סטטוס הכלב של המשפחה
+        כל כלב בא יומו (או הטיול שלו)
       </p>
 
       <div
@@ -237,7 +254,9 @@ export default function App() {
             minWidth: "240px",
           }}
         >
-          <div style={{ fontSize: "0.95rem", opacity: 0.85, marginBottom: "6px" }}>
+          <div
+            style={{ fontSize: "0.95rem", opacity: 0.85, marginBottom: "6px" }}
+          >
             הגינה זמינה עוד
           </div>
           <div
@@ -256,8 +275,8 @@ export default function App() {
           {currentStatus === "NEEDS_WALK"
             ? "פלוטו צריך לצאת לטיול 🚶"
             : currentStatus === "PEE_ONLY"
-            ? "פלוטו עשה רק פיפי"
-            : ""}
+              ? "פלוטו עשה רק פיפי"
+              : ""}
         </div>
       )}
 
@@ -384,7 +403,7 @@ export default function App() {
 function buttonStyle(
   bg: string,
   border: string,
-  disabled: boolean
+  disabled: boolean,
 ): React.CSSProperties {
   return {
     flex: "1 1 160px",
