@@ -15,7 +15,7 @@ import {
   deleteSubscription,
 } from "./db";
 import { ActionType, StatusResponse } from "./types";
-import { isPushEnabled, sendPushToAll } from "./push";
+import { isPushEnabled, sendPushToAll, vapidEnvSnapshot } from "./push";
 
 const PORT = Number(process.env.PORT) || 3001;
 const GARDEN_WINDOW_MS = Number(process.env.GARDEN_WINDOW_MS) || 15000; // garden window duration in ms (default 15s for testing)
@@ -148,14 +148,13 @@ app.post("/api/action", (req: Request, res: Response) => {
 });
 
 // GET /api/vapid-public-key -> public key for the client PushManager.
-// Reads process.env directly (live) and logs presence so Railway logs reveal
-// whether the variable is actually reaching the running server.
+// Evaluates process.env at REQUEST time (not module load) so a late-bound env
+// is picked up, and logs the exact env snapshot for debugging.
 app.get("/api/vapid-public-key", (_req: Request, res: Response) => {
   const publicKey = process.env.VAPID_PUBLIC_KEY || "";
   console.log(
-    `[push] GET /api/vapid-public-key — VAPID_PUBLIC_KEY ${
-      publicKey ? `present (len ${publicKey.length})` : "MISSING"
-    }`,
+    "[push] GET /api/vapid-public-key env:",
+    JSON.stringify(vapidEnvSnapshot()),
   );
   res.json({ publicKey });
 });
