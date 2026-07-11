@@ -18,7 +18,7 @@ import { ActionType, StatusResponse } from "./types";
 import { isPushEnabled, sendPushToAll } from "./push";
 
 const PORT = Number(process.env.PORT) || 3001;
-const GARDEN_WINDOW_MS = 15000; // 5 hours
+const GARDEN_WINDOW_MS = Number(process.env.GARDEN_WINDOW_MS) || 15000; // garden window duration in ms (default 15s for testing)
 const EXPIRY_CHECK_INTERVAL_MS = 15 * 1000; // background job cadence
 const REMINDER_LEAD_MS =
   (Number(process.env.REMINDER_LEAD_MINUTES) || 15) * 60 * 1000;
