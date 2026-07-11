@@ -15,7 +15,7 @@ import { ActionType, StatusResponse } from "./types";
 import { isPushEnabled, getPublicKey, sendPushToAll } from "./push";
 
 const PORT = Number(process.env.PORT) || 3001;
-const GARDEN_WINDOW_MS = 1000; // 5 hours
+const GARDEN_WINDOW_MS = 15000; // 5 hours
 const EXPIRY_CHECK_INTERVAL_MS = 15 * 1000; // background job cadence
 const REMINDER_LEAD_MS =
   (Number(process.env.REMINDER_LEAD_MINUTES) || 15) * 60 * 1000;
@@ -48,6 +48,51 @@ function firePush(title: string, body: string, tag: string): void {
   sendPushToAll({ title, body, tag, url: "/" }).catch((e) =>
     console.error("[push] fan-out error:", e),
   );
+}
+
+// --- Realtime (Server-Sent Events) ---------------------------------------
+
+const sseClients = new Set<Response>();
+
+// Push the current status to every connected SSE client immediately.
+function broadcastStatus(): void {
+  const data = `data: ${JSON.stringify(buildStatusResponse())}\n\n`;
+  for (const client of sseClients) client.write(data);
+}
+
+// --- Precise window scheduling -------------------------------------------
+
+let expiryTimer: NodeJS.Timeout | null = null;
+let reminderTimer: NodeJS.Timeout | null = null;
+
+// Fire the reminder and expiry the instant they are due, instead of waiting
+// for the polling backstop. Re-called whenever the garden window changes.
+function scheduleWindowTimers(): void {
+  if (expiryTimer) clearTimeout(expiryTimer);
+  if (reminderTimer) clearTimeout(reminderTimer);
+  expiryTimer = null;
+  reminderTimer = null;
+
+  const row = getStatusRow();
+  if (
+    row.current_status !== "READY_FOR_GARDEN" ||
+    row.garden_available_until === null
+  ) {
+    return;
+  }
+
+  const now = Date.now();
+  const expiryDelay = row.garden_available_until - now;
+  if (expiryDelay <= 0) {
+    checkGardenWindow();
+    return;
+  }
+  expiryTimer = setTimeout(checkGardenWindow, expiryDelay);
+
+  if (row.reminder_sent === 0) {
+    const reminderDelay = row.garden_available_until - REMINDER_LEAD_MS - now;
+    reminderTimer = setTimeout(checkGardenWindow, Math.max(0, reminderDelay));
+  }
 }
 
 // --- API routes ----------------------------------------------------------
@@ -94,6 +139,8 @@ app.post("/api/action", (req: Request, res: Response) => {
     );
   }
 
+  scheduleWindowTimers();
+  broadcastStatus();
   res.json(buildStatusResponse());
 });
 
@@ -120,6 +167,26 @@ app.post("/api/unsubscribe", (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+// GET /api/events -> Server-Sent Events stream so the UI updates in realtime.
+app.get("/api/events", (req: Request, res: Response) => {
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+  });
+  res.flushHeaders();
+
+  // Send the current state right away, then keep the connection open.
+  res.write(`data: ${JSON.stringify(buildStatusResponse())}\n\n`);
+  sseClients.add(res);
+
+  const heartbeat = setInterval(() => res.write(": ping\n\n"), 25000);
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    sseClients.delete(res);
+  });
+});
+
 // --- Background job: reminder + expire the garden window -----------------
 
 function checkGardenWindow(): void {
@@ -135,6 +202,14 @@ function checkGardenWindow(): void {
 
   if (now >= row.garden_available_until) {
     // Window elapsed -> Pluto needs a walk (delayed notification).
+    if (expiryTimer) {
+      clearTimeout(expiryTimer);
+      expiryTimer = null;
+    }
+    if (reminderTimer) {
+      clearTimeout(reminderTimer);
+      reminderTimer = null;
+    }
     updateStatus("NEEDS_WALK", null, 0);
     console.log(
       `[DELAYED NOTIFICATION] ${new Date().toISOString()} - ` +
@@ -145,6 +220,7 @@ function checkGardenWindow(): void {
       "חלון הגינה נגמר — קחו את פלוטו לטיול 🚶",
       "pluto-walk",
     );
+    broadcastStatus();
     return;
   }
 
@@ -169,7 +245,11 @@ function checkGardenWindow(): void {
   }
 }
 
+// Backstop poll in case a precise timer is ever lost (e.g. after a restart).
 setInterval(checkGardenWindow, EXPIRY_CHECK_INTERVAL_MS);
+
+// Schedule precise timers for any window already in progress at startup.
+scheduleWindowTimers();
 
 // --- Serve the compiled React client -------------------------------------
 

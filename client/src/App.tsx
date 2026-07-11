@@ -73,11 +73,23 @@ export default function App() {
     }
   }, []);
 
-  // Initial load + periodic re-sync with the server.
+  // Initial load, then subscribe to realtime status updates via SSE so the
+  // UI flips the instant the server changes state (no polling lag).
   useEffect(() => {
     fetchStatus();
-    const id = setInterval(fetchStatus, 3000);
-    return () => clearInterval(id);
+    const es = new EventSource("/api/events");
+    es.onmessage = (event) => {
+      try {
+        const data: StatusResponse = JSON.parse(event.data);
+        setStatus(data);
+        setNow(Date.now());
+        setError(null);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    // EventSource reconnects automatically on transient errors.
+    return () => es.close();
   }, [fetchStatus]);
 
   // Local 1-second tick so the countdown stays smooth between polls.
