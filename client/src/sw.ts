@@ -35,8 +35,8 @@ self.addEventListener("push", (event: PushEvent) => {
   const options: NotificationOptions = {
     body: payload.body || "",
     tag: payload.tag || "pluto-status",
-    icon: "/pwa-192x192.png",
-    badge: "/pwa-192x192.png",
+    icon: "/web-app-manifest-192x192.png",
+    badge: "/web-app-manifest-192x192.png",
     dir: "rtl",
     lang: "he",
     renotify: true,
