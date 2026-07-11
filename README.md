@@ -93,13 +93,34 @@ Railway provides the HTTPS domain that Web Push requires on mobile.
    up `nixpacks.toml` — one service, builds client + server, runs the server).
 2. In the service **Variables**, set:
    - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
-   - `DATABASE_PATH=/data/pluto.db`
    - optionally `REMINDER_LEAD_MINUTES`
    - (`PORT` is injected by Railway automatically.)
-3. Add a **Volume** mounted at `/data` so SQLite (and push subscriptions)
-   survive redeploys.
+3. **Attach a persistent Volume** (see below).
 4. Open the generated `https://…up.railway.app` URL on your phone.
 
 **iOS note:** Web Push only works for an **installed** PWA — open the URL in
 Safari, **Share → Add to Home Screen**, launch it from the home screen, then tap
 **קבל התראות** and allow. Requires iOS 16.4+.
+
+### Persistent database (Volume)
+
+Railway's container filesystem is **ephemeral** — without a volume the SQLite
+file (dog status, action history, **push subscriptions**) is wiped on every
+deploy/restart. A Railway volume is a resource you attach to the service; it
+cannot be created from a file in the repo.
+
+Attach one, mounted at **`/data`**:
+
+- **Dashboard:** service → **Settings → Volumes → New Volume**, mount path `/data`.
+- **CLI:** `railway volume add --mount-path /data`
+
+That's all — no extra env var needed. When a volume is attached Railway sets
+`RAILWAY_VOLUME_MOUNT_PATH` automatically, and the app stores the DB at
+`$RAILWAY_VOLUME_MOUNT_PATH/pluto.db` (i.e. `/data/pluto.db`). The server logs
+the resolved path at startup: `[db] SQLite file: /data/pluto.db`.
+
+To override the location explicitly (e.g. a different mount path or filename),
+set `DATABASE_PATH` to the full file path — it takes precedence over the volume.
+
+> Note: SQLite runs in WAL mode, so it also writes `pluto.db-wal` / `pluto.db-shm`
+> next to the DB file — all on the same volume, so they persist together.

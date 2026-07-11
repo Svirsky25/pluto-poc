@@ -1,14 +1,31 @@
 import Database from "better-sqlite3";
 import path from "path";
+import fs from "fs";
 import { DogStatusRow, DogStatus, PushSubscriptionRow } from "./types";
 
-// SQLite file location. On Railway, set DATABASE_PATH to a mounted volume
-// (e.g. /data/pluto.db) so data survives redeploys.
-const DB_PATH =
-  process.env.DATABASE_PATH || path.join(__dirname, "..", "pluto.db");
+// Resolve the SQLite file location so data persists across deploys.
+// Priority:
+//   1. DATABASE_PATH               — explicit override (full path to the file)
+//   2. RAILWAY_VOLUME_MOUNT_PATH   — auto-set by Railway when a volume is
+//                                    attached; the DB lives on the volume.
+//   3. ./pluto.db next to the app  — local development default (ephemeral).
+function resolveDbPath(): string {
+  if (process.env.DATABASE_PATH) return process.env.DATABASE_PATH;
+  if (process.env.RAILWAY_VOLUME_MOUNT_PATH) {
+    return path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, "pluto.db");
+  }
+  return path.join(__dirname, "..", "pluto.db");
+}
+
+const DB_PATH = resolveDbPath();
+
+// Ensure the parent directory exists (e.g. a freshly mounted, empty volume).
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 export const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
+
+console.log(`[db] SQLite file: ${DB_PATH}`);
 
 // The singleton row always uses id = 1.
 const SINGLETON_ID = 1;
