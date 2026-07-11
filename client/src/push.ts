@@ -17,6 +17,37 @@ export function getPushState(): PushState {
   return Notification.permission as PushState;
 }
 
+// Turn any thrown value into a readable string (Errors, DOMExceptions, etc.).
+export function errStr(e: unknown): string {
+  if (e instanceof Error) return `${e.name}: ${e.message}`;
+  if (typeof e === "string") return e;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+}
+
+// Environment facts that explain most iOS push failures (especially whether
+// the app is running as an installed/standalone PWA — iOS requires it).
+export function pushDiagnostics(): string {
+  const standalone =
+    (typeof window.matchMedia === "function" &&
+      window.matchMedia("(display-mode: standalone)").matches) ||
+    // iOS Safari legacy flag
+    (navigator as unknown as { standalone?: boolean }).standalone === true;
+
+  return [
+    `standalone(installed)=${standalone}`,
+    `permission=${"Notification" in window ? Notification.permission : "n/a"}`,
+    `serviceWorker=${"serviceWorker" in navigator}`,
+    `PushManager=${"PushManager" in window}`,
+    `Notification=${"Notification" in window}`,
+    `secureContext=${window.isSecureContext}`,
+    `ua=${navigator.userAgent}`,
+  ].join("\n");
+}
+
 // Convert a base64url VAPID key into the Uint8Array the PushManager expects.
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -40,28 +71,54 @@ async function getVapidPublicKey(): Promise<string> {
 // Request permission (must be called from a user gesture) and register a
 // push subscription with the server. Returns the resulting permission state.
 export async function subscribeToPush(): Promise<PushState> {
-  if (getPushState() === "unsupported") return "unsupported";
+  if (getPushState() === "unsupported") {
+    throw new Error(
+      "Push unsupported (missing serviceWorker / PushManager / Notification)",
+    );
+  }
 
-  const permission = await Notification.requestPermission();
+  // Each phase is wrapped so the surfaced error names exactly where it failed.
+  let permission: NotificationPermission;
+  try {
+    permission = await Notification.requestPermission();
+  } catch (e) {
+    throw new Error(`[requestPermission] ${errStr(e)}`);
+  }
   if (permission !== "granted") return permission as PushState;
 
-  const registration = await navigator.serviceWorker.ready;
+  let registration: ServiceWorkerRegistration;
+  try {
+    registration = await navigator.serviceWorker.ready;
+  } catch (e) {
+    throw new Error(`[serviceWorker.ready] ${errStr(e)}`);
+  }
 
   let subscription = await registration.pushManager.getSubscription();
   if (!subscription) {
     const publicKey = await getVapidPublicKey();
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
-    });
+    try {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
+      });
+    } catch (e) {
+      throw new Error(
+        `[pushManager.subscribe] ${errStr(e)} (vapidKeyLen=${publicKey.length})`,
+      );
+    }
   }
 
-  const res = await fetch("/api/subscribe", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(subscription.toJSON()),
-  });
-  if (!res.ok) throw new Error(`Subscribe failed: HTTP ${res.status}`);
+  let res: Response;
+  try {
+    res = await fetch("/api/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(subscription.toJSON()),
+    });
+  } catch (e) {
+    throw new Error(`[server subscribe fetch] ${errStr(e)}`);
+  }
+  if (!res.ok) throw new Error(`[server subscribe] HTTP ${res.status}`);
 
   return "granted";
 }

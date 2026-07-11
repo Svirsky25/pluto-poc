@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionType, DogStatus, StatusResponse } from "./types";
-import { getPushState, subscribeToPush, PushState } from "./push";
+import {
+  getPushState,
+  subscribeToPush,
+  PushState,
+  errStr,
+  pushDiagnostics,
+} from "./push";
 
 // Visual + textual config per status.
 const STATUS_CONFIG: Record<
@@ -55,7 +61,12 @@ export default function App() {
       if (state === "denied") setError("ההתראות נחסמו בדפדפן");
       else setError(null);
     } catch (e) {
-      setError("שגיאה בהפעלת התראות");
+      // Surface the exact error + environment so iOS failures are debuggable
+      // right on the device (no remote console needed).
+      const detail = `${errStr(e)}\n\n${pushDiagnostics()}`;
+      setError(detail);
+      // eslint-disable-next-line no-alert
+      alert("Push error:\n\n" + detail);
       console.error(e);
     }
   }, []);
@@ -266,9 +277,26 @@ export default function App() {
       </div>
 
       {error && (
-        <div style={{ marginTop: "16px", color: "#fff", opacity: 0.9 }}>
+        <pre
+          dir="ltr"
+          style={{
+            marginTop: "16px",
+            padding: "12px 14px",
+            maxWidth: "min(92vw, 520px)",
+            color: "#fff",
+            background: "rgba(0,0,0,0.35)",
+            border: "1px solid rgba(255,255,255,0.35)",
+            borderRadius: "10px",
+            fontSize: "0.8rem",
+            lineHeight: 1.4,
+            textAlign: "left",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            overflowWrap: "anywhere",
+          }}
+        >
           {error}
-        </div>
+        </pre>
       )}
     </div>
   );
