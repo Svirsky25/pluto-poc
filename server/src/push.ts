@@ -1,30 +1,47 @@
 import webpush from "web-push";
 import { listSubscriptions, deleteSubscription } from "./db";
 
-console.log(process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
+// Debug: report whether the keys are visible when this module loads (never
+// print the secret itself — just presence — since this lands in Railway logs).
+console.log(
+  "[push] module load — VAPID_PUBLIC_KEY:",
+  process.env.VAPID_PUBLIC_KEY ? "present" : "MISSING",
+  "VAPID_PRIVATE_KEY:",
+  process.env.VAPID_PRIVATE_KEY ? "present" : "MISSING",
+);
+
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
 
-let pushEnabled = false;
+// Read the keys LIVE from process.env every time (never cache them into a
+// const at module load) so that import ordering can never capture them before
+// dotenv / the hosting platform has populated the environment.
+export function getPublicKey(): string {
+  return process.env.VAPID_PUBLIC_KEY || "";
+}
 
-if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-  pushEnabled = true;
-  console.log("[push] Web Push enabled.");
-} else {
-  console.warn(
-    "[push] VAPID keys missing — push notifications DISABLED. " +
-      "Run `npm run generate:vapid` and set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY.",
-  );
+function getPrivateKey(): string {
+  return process.env.VAPID_PRIVATE_KEY || "";
 }
 
 export function isPushEnabled(): boolean {
-  return pushEnabled;
+  return Boolean(getPublicKey() && getPrivateKey());
 }
 
-export function getPublicKey(): string {
-  return VAPID_PUBLIC_KEY;
+// Configure web-push lazily, the first time we actually need to send.
+let vapidConfigured = false;
+function ensureVapidConfigured(): boolean {
+  if (vapidConfigured) return true;
+  if (!isPushEnabled()) {
+    console.warn(
+      "[push] VAPID keys missing — push DISABLED. Set VAPID_PUBLIC_KEY / " +
+        "VAPID_PRIVATE_KEY in the environment.",
+    );
+    return false;
+  }
+  webpush.setVapidDetails(VAPID_SUBJECT, getPublicKey(), getPrivateKey());
+  vapidConfigured = true;
+  console.log("[push] Web Push configured.");
+  return true;
 }
 
 export interface PushMessage {
@@ -37,7 +54,7 @@ export interface PushMessage {
 // Fan a notification out to every stored subscription. Stale endpoints
 // (410 Gone / 404) are pruned automatically.
 export async function sendPushToAll(message: PushMessage): Promise<void> {
-  if (!pushEnabled) return;
+  if (!ensureVapidConfigured()) return;
 
   const subscriptions = listSubscriptions();
   const payload = JSON.stringify(message);

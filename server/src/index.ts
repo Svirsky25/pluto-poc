@@ -1,3 +1,6 @@
+// Load environment variables FIRST. This side-effect import is hoisted above
+// the local imports below (./db, ./push), so any module that reads process.env
+// at load time sees the values. Keep it as the very first import.
 import "dotenv/config";
 import express, { Request, Response } from "express";
 import cors from "cors";
@@ -12,7 +15,7 @@ import {
   deleteSubscription,
 } from "./db";
 import { ActionType, StatusResponse } from "./types";
-import { isPushEnabled, getPublicKey, sendPushToAll } from "./push";
+import { isPushEnabled, sendPushToAll } from "./push";
 
 const PORT = Number(process.env.PORT) || 3001;
 const GARDEN_WINDOW_MS = 15000; // 5 hours
@@ -145,8 +148,16 @@ app.post("/api/action", (req: Request, res: Response) => {
 });
 
 // GET /api/vapid-public-key -> public key for the client PushManager.
+// Reads process.env directly (live) and logs presence so Railway logs reveal
+// whether the variable is actually reaching the running server.
 app.get("/api/vapid-public-key", (_req: Request, res: Response) => {
-  res.json({ publicKey: getPublicKey() });
+  const publicKey = process.env.VAPID_PUBLIC_KEY || "";
+  console.log(
+    `[push] GET /api/vapid-public-key — VAPID_PUBLIC_KEY ${
+      publicKey ? `present (len ${publicKey.length})` : "MISSING"
+    }`,
+  );
+  res.json({ publicKey });
 });
 
 // POST /api/subscribe -> store a Web Push subscription.
@@ -265,4 +276,11 @@ app.listen(PORT, () => {
   console.log(`Pluto server listening on http://localhost:${PORT}`);
   console.log(`Serving client from: ${clientDist}`);
   console.log(`Push notifications: ${isPushEnabled() ? "ON" : "OFF"}`);
+  console.log(
+    `[env] VAPID_PUBLIC_KEY ${
+      process.env.VAPID_PUBLIC_KEY ? "present" : "MISSING"
+    }, VAPID_PRIVATE_KEY ${
+      process.env.VAPID_PRIVATE_KEY ? "present" : "MISSING"
+    }, VAPID_SUBJECT ${process.env.VAPID_SUBJECT ? "present" : "default"}`,
+  );
 });
