@@ -1,0 +1,15 @@
+# Railway / Nixpacks build configuration.
+# A single service: builds the React client and the Express server, then
+# runs the server (which serves the compiled client and the /api endpoints).
+
+[phases.setup]
+nixPkgs = ["nodejs_22", "python3", "gcc", "gnumake"]
+
+[phases.install]
+cmds = ["npm install --prefix server", "npm install --prefix client"]
+
+[phases.build]
+cmds = ["npm run build --prefix client", "npm run build --prefix server"]
+
+[start]
+cmd = "npm run start --prefix server"

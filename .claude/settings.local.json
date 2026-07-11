@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(node dist/index.js)",
+      "Read(//tmp/**)",
+      "Bash(curl -s http://localhost:3001/api/status)",
+      "Bash(curl -s -X POST http://localhost:3001/api/action -H \"Content-Type: application/json\" -d '{\"action_type\":\"PEE_AND_POOP\"}')",
+      "Bash(curl -s -X POST http://localhost:3001/api/action -H \"Content-Type: application/json\" -d '{\"action_type\":\"PEE_ONLY\"}')",
+      "Bash(node -e ' *)",
+      "Bash(taskkill //F //IM node.exe)"
+    ]
+  }
+}

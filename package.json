@@ -1,0 +1,19 @@
+{
+  "name": "pluto-poc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pluto - family dog status POC (monolith: Express + SQLite + React PWA)",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "install:all": "npm install --prefix server && npm install --prefix client",
+    "build:client": "npm run build --prefix client",
+    "build:server": "npm run build --prefix server",
+    "build": "npm install --prefix server && npm install --prefix client && npm run build --prefix client && npm run build --prefix server",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "generate:vapid": "npm run generate:vapid --prefix server",
+    "start": "npm run start --prefix server"
+  }
+}
